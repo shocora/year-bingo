@@ -1,0 +1,8 @@
+name = "year-bingo"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-05-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "year-bingo-db"
+database_id = "4479b4fa-141e-4563-9e51-a691db074ec0"
