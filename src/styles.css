@@ -313,6 +313,16 @@ h1 {
   background: rgba(255, 255, 255, 0.68);
 }
 
+.cell-empty {
+  --cell-bg: #eceff1;
+  border-color: rgba(72, 78, 84, 0.3);
+  color: #2f3438;
+}
+
+.cell-empty .value-input {
+  background: rgba(255, 255, 255, 0.64);
+}
+
 .tone-rose {
   --cell-bg: #ffe6e9;
 }

@@ -383,7 +383,7 @@ export default function App() {
           return (
             <div
               aria-label={`${index + 1}. ${cell.title}${member ? ` ${member.name}` : " 未配置"}`}
-              className={`bingo-cell ${member ? `has-member cell-owned ${member.colorClass}` : `tone-${cell.tone}`}`}
+              className={`bingo-cell ${member ? `has-member cell-owned ${member.colorClass}` : "cell-empty"}`}
               data-cell-id={cell.id}
               key={cell.id}
             >
