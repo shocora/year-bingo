@@ -1,22 +1,27 @@
 import { RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  applyAction,
+  MAX_VALUE_LENGTH,
+  applyStateAction,
   cells,
   createEmptyPlacements,
+  createEmptyValues,
   getMember,
   members,
   sanitizePlacements,
+  sanitizeValues,
   type BingoAction,
   type CellId,
   type MemberId,
-  type Placements
+  type Placements,
+  type Values
 } from "../shared/domain";
 
 type SyncState = "loading" | "ready" | "saving" | "offline";
 
 type RemoteState = {
   placements: Placements;
+  values: Values;
   version: number;
   updatedAt: string;
 };
@@ -35,6 +40,7 @@ const dragThreshold = 8;
 
 export default function App() {
   const [placements, setPlacements] = useState<Placements>(() => createEmptyPlacements());
+  const [values, setValues] = useState<Values>(() => createEmptyValues());
   const [selectedMemberId, setSelectedMemberId] = useState<MemberId | "clear">("ryo");
   const [syncState, setSyncState] = useState<SyncState>("loading");
   const [version, setVersion] = useState<number | null>(null);
@@ -42,11 +48,16 @@ export default function App() {
   const [dragging, setDragging] = useState<DragState | null>(null);
   const isSavingRef = useRef(false);
   const draggingRef = useRef<DragState | null>(null);
+  const savedValuesRef = useRef<Values>(createEmptyValues());
+  const valueSaveTimersRef = useRef<Partial<Record<CellId, number>>>({});
 
   const selectedMember = selectedMemberId === "clear" ? null : getMember(selectedMemberId);
 
   const applyRemoteState = useCallback((state: RemoteState) => {
     setPlacements(sanitizePlacements(state.placements));
+    const nextValues = sanitizeValues(state.values);
+    setValues(nextValues);
+    savedValuesRef.current = nextValues;
     setVersion(state.version);
     setUpdatedAt(state.updatedAt);
     setSyncState("ready");
@@ -83,9 +94,20 @@ export default function App() {
     return () => window.clearInterval(intervalId);
   }, [loadState]);
 
+  useEffect(() => {
+    return () => {
+      for (const timerId of Object.values(valueSaveTimersRef.current)) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, []);
+
   const commitAction = useCallback(
     async (action: BingoAction) => {
-      setPlacements((currentPlacements) => applyAction(currentPlacements, action));
+      setPlacements((currentPlacements) =>
+        applyStateAction({ placements: currentPlacements, values }, action).placements
+      );
+      setValues((currentValues) => applyStateAction({ placements, values: currentValues }, action).values);
       setSyncState("saving");
       isSavingRef.current = true;
 
@@ -111,7 +133,7 @@ export default function App() {
         isSavingRef.current = false;
       }
     },
-    [applyRemoteState, loadState]
+    [applyRemoteState, loadState, placements, values]
   );
 
   const handleCellTap = useCallback(
@@ -125,6 +147,40 @@ export default function App() {
       void commitAction({ type: "set", cellId, memberId: nextMemberId });
     },
     [commitAction, placements, selectedMemberId]
+  );
+
+  const commitCellValue = useCallback(
+    (cellId: CellId, nextValue = values[cellId] ?? "") => {
+      const value = nextValue.slice(0, MAX_VALUE_LENGTH);
+      const timerId = valueSaveTimersRef.current[cellId];
+
+      if (timerId) {
+        window.clearTimeout(timerId);
+        delete valueSaveTimersRef.current[cellId];
+      }
+
+      if (value === savedValuesRef.current[cellId]) {
+        return;
+      }
+
+      void commitAction({ type: "setValue", cellId, value });
+    },
+    [commitAction, values]
+  );
+
+  const handleValueInput = useCallback(
+    (cellId: CellId, value: string) => {
+      const nextValue = value.slice(0, MAX_VALUE_LENGTH);
+      const timerId = valueSaveTimersRef.current[cellId];
+
+      if (timerId) {
+        window.clearTimeout(timerId);
+      }
+
+      setValues((currentValues) => ({ ...currentValues, [cellId]: nextValue }));
+      valueSaveTimersRef.current[cellId] = window.setTimeout(() => commitCellValue(cellId, nextValue), 700);
+    },
+    [commitCellValue]
   );
 
   const startDrag = useCallback(
@@ -322,21 +378,37 @@ export default function App() {
         {cells.map((cell, index) => {
           const memberId = placements[cell.id];
           const member = memberId ? getMember(memberId) : null;
+          const value = values[cell.id] ?? "";
 
           return (
-            <button
+            <div
               aria-label={`${index + 1}. ${cell.title}${member ? ` ${member.name}` : " 未配置"}`}
               className={`bingo-cell tone-${cell.tone} ${member ? "has-member" : ""}`}
               data-cell-id={cell.id}
               key={cell.id}
-              type="button"
-              onClick={() => handleCellTap(cell.id)}
             >
-              <span className="cell-title">{cell.title}</span>
-              <span className="cell-meta">
-                {cell.unit ? `${cell.unit} / ` : ""}
-                {cell.sample}
-              </span>
+              <button className="cell-tap-target" type="button" onClick={() => handleCellTap(cell.id)}>
+                <span className="cell-title">{cell.title}</span>
+              </button>
+              <label className="value-field">
+                <span className="sr-only">{cell.title}の値</span>
+                <input
+                  className="value-input"
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  maxLength={MAX_VALUE_LENGTH}
+                  value={value}
+                  placeholder="入力"
+                  onInput={(event) => handleValueInput(cell.id, event.currentTarget.value)}
+                  onBlur={(event) => commitCellValue(cell.id, event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.currentTarget.blur();
+                    }
+                  }}
+                />
+              </label>
               {member ? (
                 <span
                   className={`placed-chip ${member.colorClass}`}
@@ -348,7 +420,7 @@ export default function App() {
                   <span>{member.name}</span>
                 </span>
               ) : null}
-            </button>
+            </div>
           );
         })}
       </section>

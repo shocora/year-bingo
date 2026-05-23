@@ -37,10 +37,18 @@ export const cells = [
 export type MemberId = (typeof members)[number]["id"];
 export type CellId = (typeof cells)[number]["id"];
 export type Placements = Record<CellId, MemberId | null>;
+export type Values = Record<CellId, string>;
+export type BingoStateData = {
+  placements: Placements;
+  values: Values;
+};
+
+export const MAX_VALUE_LENGTH = 32;
 
 export type BingoAction =
   | { type: "set"; cellId: CellId; memberId: MemberId | null }
   | { type: "move"; fromCellId: CellId; toCellId: CellId; memberId: MemberId }
+  | { type: "setValue"; cellId: CellId; value: string }
   | { type: "reset" };
 
 const memberIds = new Set<string>(members.map((member) => member.id));
@@ -58,6 +66,17 @@ export function createEmptyPlacements(): Placements {
   return Object.fromEntries(cells.map((cell) => [cell.id, null])) as Placements;
 }
 
+export function createEmptyValues(): Values {
+  return Object.fromEntries(cells.map((cell) => [cell.id, ""])) as Values;
+}
+
+export function createEmptyState(): BingoStateData {
+  return {
+    placements: createEmptyPlacements(),
+    values: createEmptyValues()
+  };
+}
+
 export function sanitizePlacements(value: unknown): Placements {
   const placements = createEmptyPlacements();
 
@@ -71,6 +90,40 @@ export function sanitizePlacements(value: unknown): Placements {
   }
 
   return placements;
+}
+
+export function sanitizeValues(value: unknown): Values {
+  const values = createEmptyValues();
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return values;
+  }
+
+  for (const cell of cells) {
+    values[cell.id] = normalizeValue((value as Record<string, unknown>)[cell.id]);
+  }
+
+  return values;
+}
+
+export function sanitizeState(value: unknown): BingoStateData {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return createEmptyState();
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if ("placements" in record || "values" in record) {
+    return {
+      placements: sanitizePlacements(record.placements),
+      values: sanitizeValues(record.values)
+    };
+  }
+
+  return {
+    placements: sanitizePlacements(value),
+    values: createEmptyValues()
+  };
 }
 
 export function parseAction(value: unknown): BingoAction | null {
@@ -88,6 +141,10 @@ export function parseAction(value: unknown): BingoAction | null {
     if (action.memberId === null || isMemberId(action.memberId)) {
       return { type: "set", cellId: action.cellId, memberId: action.memberId };
     }
+  }
+
+  if (action.type === "setValue" && isCellId(action.cellId) && typeof action.value === "string") {
+    return { type: "setValue", cellId: action.cellId, value: normalizeValue(action.value) };
   }
 
   if (
@@ -114,6 +171,10 @@ export function applyAction(currentPlacements: Placements, action: BingoAction):
     return createEmptyPlacements();
   }
 
+  if (action.type === "setValue") {
+    return nextPlacements;
+  }
+
   if (action.type === "set") {
     nextPlacements[action.cellId] = action.memberId;
     return nextPlacements;
@@ -133,6 +194,35 @@ export function applyAction(currentPlacements: Placements, action: BingoAction):
   return nextPlacements;
 }
 
+export function applyStateAction(currentState: BingoStateData, action: BingoAction): BingoStateData {
+  if (action.type === "reset") {
+    return createEmptyState();
+  }
+
+  if (action.type === "setValue") {
+    return {
+      placements: currentState.placements,
+      values: {
+        ...currentState.values,
+        [action.cellId]: normalizeValue(action.value)
+      }
+    };
+  }
+
+  return {
+    placements: applyAction(currentState.placements, action),
+    values: currentState.values
+  };
+}
+
 export function getMember(memberId: MemberId) {
   return members.find((member) => member.id === memberId);
+}
+
+function normalizeValue(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, MAX_VALUE_LENGTH);
 }

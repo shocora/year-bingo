@@ -1,10 +1,10 @@
 import {
-  applyAction,
-  createEmptyPlacements,
+  applyStateAction,
+  createEmptyState,
   parseAction,
-  sanitizePlacements,
+  sanitizeState,
   type BingoAction,
-  type Placements
+  type BingoStateData
 } from "../../shared/domain";
 
 type Env = {
@@ -12,7 +12,8 @@ type Env = {
 };
 
 type StoredState = {
-  placements: Placements;
+  placements: BingoStateData["placements"];
+  values: BingoStateData["values"];
   version: number;
   updatedAt: string;
 };
@@ -45,8 +46,11 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     }
 
     const storedState = await getStoredState(env.DB);
-    const nextPlacements = applyAction(storedState.placements, action);
-    const nextState = await savePlacements(env.DB, nextPlacements);
+    const nextStateData = applyStateAction(
+      { placements: storedState.placements, values: storedState.values },
+      action
+    );
+    const nextState = await saveStateData(env.DB, nextStateData);
 
     return jsonResponse(nextState);
   }
@@ -89,28 +93,31 @@ async function getStoredState(db: D1Database): Promise<StoredState> {
     .first<{ data: string; version: number; updated_at: string }>();
 
   if (!row) {
-    const placements = createEmptyPlacements();
+    const state = createEmptyState();
     await db
       .prepare("INSERT INTO bingo_state (id, data, version, updated_at) VALUES (?1, ?2, 1, datetime('now'))")
-      .bind(STATE_ID, JSON.stringify(placements))
+      .bind(STATE_ID, JSON.stringify(state))
       .run();
 
     return getStoredState(db);
   }
 
+  const state = sanitizeState(JSON.parse(row.data));
+
   return {
-    placements: sanitizePlacements(JSON.parse(row.data)),
+    placements: state.placements,
+    values: state.values,
     version: row.version,
     updatedAt: row.updated_at
   };
 }
 
-async function savePlacements(db: D1Database, placements: Placements): Promise<StoredState> {
+async function saveStateData(db: D1Database, state: BingoStateData): Promise<StoredState> {
   await db
     .prepare(
       "UPDATE bingo_state SET data = ?1, version = version + 1, updated_at = datetime('now') WHERE id = ?2"
     )
-    .bind(JSON.stringify(placements), STATE_ID)
+    .bind(JSON.stringify(state), STATE_ID)
     .run();
 
   return getStoredState(db);
