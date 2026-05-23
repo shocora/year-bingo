@@ -1,4 +1,4 @@
-import { RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyAction,
@@ -328,13 +328,6 @@ export default function App() {
             </button>
           );
         })}
-      </section>
-
-      <section className="utility-row">
-        <button className="ghost-button" type="button" onClick={() => void commitAction({ type: "reset" })}>
-          <RotateCcw size={17} aria-hidden="true" />
-          <span>全部はずす</span>
-        </button>
       </section>
 
       <details className="source-board">

@@ -262,8 +262,7 @@ h1 {
 
 .bingo-cell:focus-visible,
 .member-chip:focus-visible,
-.icon-button:focus-visible,
-.ghost-button:focus-visible {
+.icon-button:focus-visible {
   outline: 3px solid #111;
   outline-offset: 2px;
 }
@@ -361,25 +360,6 @@ h1 {
   min-width: 0;
   text-overflow: clip;
   white-space: nowrap;
-}
-
-.utility-row {
-  display: flex;
-  justify-content: center;
-  padding: 14px 0 4px;
-}
-
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 42px;
-  padding: 8px 14px;
-  border: 1px solid rgba(28, 26, 24, 0.14);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #34302b;
-  font-weight: 900;
 }
 
 .drag-ghost {
