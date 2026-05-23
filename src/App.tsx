@@ -224,6 +224,18 @@ export default function App() {
     [placements]
   );
 
+  const memberCounts = useMemo(() => {
+    const counts = Object.fromEntries(members.map((member) => [member.id, 0])) as Record<MemberId, number>;
+
+    for (const memberId of Object.values(placements)) {
+      if (memberId) {
+        counts[memberId] += 1;
+      }
+    }
+
+    return counts;
+  }, [placements]);
+
   const statusLabel = useMemo(() => {
     if (syncState === "loading") {
       return "読み込み中";
@@ -262,36 +274,48 @@ export default function App() {
             className={`member-chip ${member.colorClass} ${
               selectedMemberId === member.id ? "is-selected" : ""
             }`}
+            aria-label={`${member.name} ${memberCounts[member.id]}枚`}
             key={member.id}
             type="button"
             onClick={() => setSelectedMemberId(member.id)}
             onPointerDown={(event) => startDrag(event, member.id)}
           >
             <span className="chip-dot">{member.shortName}</span>
-            <span>{member.name}</span>
+            <span className="member-name">{member.name}</span>
+            <span className="member-count">{memberCounts[member.id]}枚</span>
           </button>
         ))}
-        <button
-          className={`icon-button ${selectedMemberId === "clear" ? "is-selected" : ""}`}
-          type="button"
-          onClick={() => setSelectedMemberId("clear")}
-          aria-label="選択したマスを空にする"
-          title="空にする"
-        >
-          <Trash2 size={18} aria-hidden="true" />
-        </button>
-        <button className="icon-button" type="button" onClick={() => void loadState()} aria-label="再読み込み" title="再読み込み">
-          <RefreshCw size={18} aria-hidden="true" />
-        </button>
       </section>
 
       <section className="selection-line" aria-live="polite">
-        <span>選択中</span>
-        {selectedMember ? (
-          <strong className={`inline-member ${selectedMember.colorClass}`}>{selectedMember.name}</strong>
-        ) : (
-          <strong className="inline-clear">空にする</strong>
-        )}
+        <div className="selection-status">
+          <span>選択中</span>
+          {selectedMember ? (
+            <strong className={`inline-member ${selectedMember.colorClass}`}>{selectedMember.name}</strong>
+          ) : (
+            <strong className="inline-clear">空にする</strong>
+          )}
+        </div>
+        <div className="selection-actions">
+          <button
+            className={`icon-button compact ${selectedMemberId === "clear" ? "is-selected" : ""}`}
+            type="button"
+            onClick={() => setSelectedMemberId("clear")}
+            aria-label="選択したマスを空にする"
+            title="空にする"
+          >
+            <Trash2 size={18} aria-hidden="true" />
+          </button>
+          <button
+            className="icon-button compact"
+            type="button"
+            onClick={() => void loadState()}
+            aria-label="再読み込み"
+            title="再読み込み"
+          >
+            <RefreshCw size={18} aria-hidden="true" />
+          </button>
+        </div>
       </section>
 
       <section className="board" aria-label="ビンゴボード">
@@ -321,7 +345,6 @@ export default function App() {
                     startDrag(event, member.id, cell.id);
                   }}
                 >
-                  <span className="chip-dot">{member.shortName}</span>
                   <span>{member.name}</span>
                 </span>
               ) : null}
