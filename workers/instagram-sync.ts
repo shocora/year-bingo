@@ -60,7 +60,7 @@ type SyncSummary = {
 
 const STATE_ID = "default";
 const DEFAULT_GRAPH_BASE_URL = "https://graph.facebook.com/v25.0";
-const DEFAULT_OPENAI_MODEL = "gpt-5.5";
+const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini";
 const DEFAULT_MIN_CONFIDENCE = 0.72;
 const DEFAULT_MAX_MEDIA = 8;
 
