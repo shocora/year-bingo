@@ -12,7 +12,9 @@
     "security": "npm audit --audit-level=moderate",
     "cf:migrate:local": "wrangler d1 migrations apply year-bingo-db --local",
     "cf:migrate:remote": "wrangler d1 migrations apply year-bingo-db --remote",
-    "cf:dev": "npm run build && wrangler pages dev dist"
+    "cf:dev": "npm run build && wrangler pages dev dist",
+    "cf:instagram:dev": "wrangler dev --config wrangler.instagram-sync.toml",
+    "cf:instagram:deploy": "wrangler deploy --config wrangler.instagram-sync.toml"
   },
   "dependencies": {
     "lucide-react": "^0.555.0",

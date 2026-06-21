@@ -1,0 +1,20 @@
+name = "year-bingo-instagram-sync"
+main = "workers/instagram-sync.ts"
+compatibility_date = "2026-06-21"
+
+[secrets]
+required = ["INSTAGRAM_ACCESS_TOKEN", "INSTAGRAM_USER_ID", "OPENAI_API_KEY", "RUN_TOKEN"]
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+INSTAGRAM_GRAPH_BASE_URL = "https://graph.facebook.com/v25.0"
+OPENAI_MODEL = "gpt-5.4-mini"
+AUTO_APPLY_MIN_CONFIDENCE = "0.72"
+MAX_MEDIA_PER_RUN = "8"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "year-bingo-db"
+database_id = "4479b4fa-141e-4563-9e51-a691db074ec0"
