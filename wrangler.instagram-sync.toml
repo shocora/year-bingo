@@ -10,7 +10,7 @@ crons = ["*/15 * * * *"]
 
 [vars]
 INSTAGRAM_GRAPH_BASE_URL = "https://graph.facebook.com/v25.0"
-OPENAI_MODEL = "gpt-5.5"
+OPENAI_MODEL = "gpt-5.4-mini"
 AUTO_APPLY_MIN_CONFIDENCE = "0.72"
 MAX_MEDIA_PER_RUN = "8"
 
