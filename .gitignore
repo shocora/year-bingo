@@ -2,7 +2,8 @@ node_modules/
 dist/
 artifacts/
 .wrangler/
-.dev.vars
+.dev.vars*
+.env*
 *.local
 *.log
 npm-debug.log*
