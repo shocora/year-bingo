@@ -17,5 +17,5 @@
     "jsx": "react-jsx",
     "types": ["@cloudflare/workers-types", "vitest/globals"]
   },
-  "include": ["src", "shared", "functions", "vite.config.ts"]
+  "include": ["src", "shared", "functions", "workers", "vite.config.ts"]
 }
