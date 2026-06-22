@@ -32,6 +32,7 @@ type LambdaResult = {
   caption?: string;
   classification?: Partial<Classification>;
   error?: string;
+  skipped?: string;
 };
 
 type LambdaResponse = {
@@ -88,7 +89,8 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   };
 
   try {
-    const lambdaResponse = await callLambda(env);
+    const processedPostIds = await getRecentProcessedPostIds(env.DB);
+    const lambdaResponse = await callLambda(env, processedPostIds);
 
     if (lambdaResponse.status === "error") {
       throw new Error(lambdaResponse.errors?.join("\n") || "Lambda sync failed");
@@ -143,7 +145,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   return jsonResponse(summary, summary.status === "success" ? 200 : 500);
 };
 
-async function callLambda(env: Env): Promise<LambdaResponse> {
+async function callLambda(env: Env, processedPostIds: string[]): Promise<LambdaResponse> {
   if (!env.INSTAGRAM_SYNC_LAMBDA_URL) {
     throw new Error("Missing required env: INSTAGRAM_SYNC_LAMBDA_URL");
   }
@@ -161,7 +163,7 @@ async function callLambda(env: Env): Promise<LambdaResponse> {
   const response = await fetch(env.INSTAGRAM_SYNC_LAMBDA_URL, {
     method: "POST",
     headers,
-    body: JSON.stringify({ maxPosts: maxPosts(env) })
+    body: JSON.stringify({ maxPosts: maxPosts(env), processedPostIds })
   });
 
   const bodyText = await response.text();
@@ -244,6 +246,17 @@ async function isProcessed(db: D1Database, postId: string) {
     .bind(postId)
     .first();
   return Boolean(row);
+}
+
+async function getRecentProcessedPostIds(db: D1Database) {
+  const result = await db
+    .prepare("SELECT post_id FROM instagram_processed_posts ORDER BY processed_at DESC LIMIT ?1")
+    .bind(200)
+    .all<{ post_id: string }>();
+
+  return (result.results ?? [])
+    .map((row) => row.post_id)
+    .filter((postId): postId is string => typeof postId === "string" && postId.length > 0);
 }
 
 async function recordProcessedPost(
