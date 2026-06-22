@@ -224,11 +224,43 @@ h1 {
   min-height: 34px;
 }
 
+.instagram-sync-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 104px;
+  min-height: 34px;
+  padding: 5px 9px;
+  border: 1px solid rgba(28, 26, 24, 0.15);
+  border-radius: 8px;
+  background: #1f2937;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.instagram-sync-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.instagram-sync-success {
+  background: #167247;
+}
+
+.instagram-sync-error {
+  background: #9b1c31;
+}
+
 .selection-line {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 7px;
+  flex-wrap: wrap;
   min-height: 34px;
   margin-bottom: 8px;
   color: #5c544c;
@@ -249,6 +281,8 @@ h1 {
 
 .selection-actions {
   flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .inline-member,
