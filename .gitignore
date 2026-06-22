@@ -2,9 +2,16 @@ node_modules/
 dist/
 artifacts/
 .wrangler/
-.dev.vars
+.dev.vars*
+.env*
 *.local
 *.log
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
+__pycache__/
+*.pyc
+workers/
+scripts/
+requirements-selenium.txt
+wrangler.instagram-sync.toml

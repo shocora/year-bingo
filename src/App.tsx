@@ -1,4 +1,4 @@
-import { RefreshCw, Trash2 } from "lucide-react";
+import { Instagram, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MAX_VALUE_LENGTH,
@@ -18,6 +18,8 @@ import {
 } from "../shared/domain";
 
 type SyncState = "loading" | "ready" | "saving" | "offline";
+
+type InstagramSyncState = "idle" | "syncing" | "success" | "error";
 
 type RemoteState = {
   placements: Placements;
@@ -43,6 +45,8 @@ export default function App() {
   const [values, setValues] = useState<Values>(() => createEmptyValues());
   const [selectedMemberId, setSelectedMemberId] = useState<MemberId | "clear">("ryo");
   const [syncState, setSyncState] = useState<SyncState>("loading");
+  const [instagramSyncState, setInstagramSyncState] = useState<InstagramSyncState>("idle");
+  const [instagramSyncMessage, setInstagramSyncMessage] = useState("");
   const [version, setVersion] = useState<number | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [dragging, setDragging] = useState<DragState | null>(null);
@@ -275,6 +279,43 @@ export default function App() {
     };
   }, [commitAction, dragging]);
 
+  const handleInstagramSync = useCallback(async () => {
+    setInstagramSyncState("syncing");
+    setInstagramSyncMessage("更新中");
+
+    try {
+      const response = await fetch("/api/instagram-sync", {
+        method: "POST",
+        headers: { accept: "application/json" },
+        cache: "no-store"
+      });
+      const result = (await response.json()) as {
+        status?: string;
+        postsApplied?: number;
+        postsSeen?: number;
+        cooldown?: boolean;
+        errors?: string[];
+      };
+
+      if (!response.ok || result.status === "error") {
+        throw new Error(result.errors?.[0] || `POST /api/instagram-sync failed: ${response.status}`);
+      }
+
+      await loadState();
+      setInstagramSyncState("success");
+      if (result.cooldown) {
+        setInstagramSyncMessage("少し待って");
+      } else if ((result.postsApplied ?? 0) > 0) {
+        setInstagramSyncMessage(`${result.postsApplied ?? 0}件反映`);
+      } else {
+        setInstagramSyncMessage((result.postsSeen ?? 0) > 0 ? "反映なし" : "投稿なし");
+      }
+    } catch {
+      setInstagramSyncState("error");
+      setInstagramSyncMessage("更新失敗");
+    }
+  }, [loadState]);
+
   const filledCount = useMemo(
     () => Object.values(placements).filter((memberId) => memberId !== null).length,
     [placements]
@@ -353,6 +394,18 @@ export default function App() {
           )}
         </div>
         <div className="selection-actions">
+          <button
+            className={`instagram-sync-button instagram-sync-${instagramSyncState}`}
+            type="button"
+            onClick={() => void handleInstagramSync()}
+            disabled={instagramSyncState === "syncing" || syncState === "loading"}
+            aria-label="Instagramの投稿から更新する"
+            aria-busy={instagramSyncState === "syncing"}
+            title={instagramSyncMessage || "Instagram更新"}
+          >
+            <Instagram size={16} aria-hidden="true" />
+            <span>{instagramSyncMessage || "インスタ更新"}</span>
+          </button>
           <button
             className={`icon-button compact ${selectedMemberId === "clear" ? "is-selected" : ""}`}
             type="button"
