@@ -78,6 +78,7 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
         verify_request(event)
         body = parse_body(event)
         max_posts = max(1, min(20, int(body.get("maxPosts") or os.environ.get("MAX_MEDIA_PER_RUN", DEFAULT_MAX_POSTS))))
+        processed_post_ids = parse_processed_post_ids(body.get("processedPostIds"))
 
         crawler = InstagramCrawler(env_required("INSTAGRAM_USERNAME"), env_required("INSTAGRAM_PASSWORD"))
         try:
@@ -92,6 +93,17 @@ def handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
         errors = []
 
         for post in posts:
+            if post.post_id in processed_post_ids:
+                results.append(
+                    {
+                        "postId": post.post_id,
+                        "permalink": post.permalink,
+                        "caption": post.caption,
+                        "skipped": "alreadyProcessed",
+                    }
+                )
+                continue
+
             try:
                 results.append(
                     {
@@ -376,6 +388,12 @@ def parse_body(event: dict[str, Any]) -> dict[str, Any]:
     if isinstance(body, str):
         return json.loads(body)
     return body if isinstance(body, dict) else {}
+
+
+def parse_processed_post_ids(value: Any) -> set[str]:
+    if not isinstance(value, list):
+        return set()
+    return {post_id for item in value if isinstance(item, str) and (post_id := clean_text(item))}
 
 
 def json_response(body: dict[str, Any], status_code: int = 200) -> dict[str, Any]:
