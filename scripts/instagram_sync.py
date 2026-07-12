@@ -100,6 +100,7 @@ def main() -> int:
 
     driver = create_driver(headless=not args.visible)
     results: list[dict[str, Any]] = []
+    post_urls: list[str] = []
 
     try:
         print("Instagramにログインしています...")
@@ -129,6 +130,10 @@ def main() -> int:
             except Exception as exc:  # Continue so one malformed post does not block the run.
                 results.append({"postId": post_id, "permalink": url, "error": str(exc)})
                 print(f"  解析失敗: {exc}", file=sys.stderr)
+    except Exception:
+        if args.visible:
+            wait_before_closing_browser()
+        raise
     finally:
         driver.quit()
 
@@ -220,6 +225,7 @@ def login(driver: webdriver.Chrome, username: str, password: str, interactive: b
         wait.until(
             lambda current: is_authenticated(current)
             or has_verification_challenge(current)
+            or has_manual_action_message(current)
             or has_login_error_message(current)
         )
     except TimeoutException as exc:
@@ -228,6 +234,23 @@ def login(driver: webdriver.Chrome, username: str, password: str, interactive: b
             "Instagramログイン完了を確認できませんでした。"
             f"Chrome上で止まっている画面を確認してください。デバッグ保存先: {snapshot}"
         ) from exc
+
+    if has_manual_action_message(driver):
+        if not interactive:
+            snapshot = save_debug_snapshot(driver, "login-manual-action")
+            raise RuntimeError(
+                "Instagramが手動確認を要求しました。--visibleで再実行してください。"
+                f"デバッグ保存先: {snapshot}"
+            )
+        print("Chrome上でreCAPTCHAや本人確認を完了してください（最大5分待機します）。")
+        try:
+            WebDriverWait(driver, 300).until(is_authenticated)
+        except TimeoutException as exc:
+            snapshot = save_debug_snapshot(driver, "login-manual-action-timeout")
+            raise RuntimeError(
+                "Instagramの手動確認が時間内に完了しませんでした。"
+                f"デバッグ保存先: {snapshot}"
+            ) from exc
 
     if has_login_error_message(driver):
         snapshot = save_debug_snapshot(driver, "login-error")
@@ -319,10 +342,13 @@ def has_manual_action_message(driver: webdriver.Chrome) -> bool:
     page_text = body_text(driver).lower()
     markers = (
         "本人確認",
+        "私はロボットではありません",
         "認証コード",
         "セキュリティコード",
+        "セキュリティチェック",
         "アカウントにアクセス",
         "しばらくしてから",
+        "recaptcha",
         "suspicious",
         "challenge",
         "verification",
@@ -340,6 +366,14 @@ def body_text(driver: webdriver.Chrome) -> str:
 def body_excerpt(driver: webdriver.Chrome, max_length: int = 220) -> str:
     text = body_text(driver)
     return text[:max_length] if text else "(本文なし)"
+
+def wait_before_closing_browser() -> None:
+    if not sys.stdin.isatty():
+        return
+    try:
+        input("エラーが発生しました。Chromeを確認できます。閉じるにはEnterを押してください...")
+    except EOFError:
+        return
 
 def dismiss_optional_dialogs(driver: webdriver.Chrome) -> None:
     for _ in range(3):
