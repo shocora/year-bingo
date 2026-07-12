@@ -253,7 +253,8 @@ def login_finished(driver: webdriver.Chrome) -> bool:
 def find_login_inputs(driver: webdriver.Chrome):
     username_selectors = (
         "input[name='username']",
-        "input[autocomplete='username']",
+        "input[name='email']",
+        "input[autocomplete*='username']",
         "input[aria-label*='電話']",
         "input[aria-label*='Phone']",
         "input[aria-label*='email']",
@@ -261,6 +262,7 @@ def find_login_inputs(driver: webdriver.Chrome):
     )
     password_selectors = (
         "input[name='password']",
+        "input[name='pass']",
         "input[type='password']",
         "input[autocomplete='current-password']",
     )
