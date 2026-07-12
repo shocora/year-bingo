@@ -186,7 +186,7 @@ def login(driver: webdriver.Chrome, username: str, password: str, interactive: b
 
     try:
         wait.until(
-            lambda current: login_finished(current)
+            lambda current: is_authenticated(current)
             or has_verification_challenge(current)
             or find_login_inputs(current)
         )
@@ -197,7 +197,7 @@ def login(driver: webdriver.Chrome, username: str, password: str, interactive: b
             f"Chromeに表示されている内容を確認してください。デバッグ保存先: {snapshot}"
         ) from exc
 
-    if login_finished(driver):
+    if is_authenticated(driver):
         dismiss_optional_dialogs(driver)
         return
 
@@ -218,7 +218,7 @@ def login(driver: webdriver.Chrome, username: str, password: str, interactive: b
 
     try:
         wait.until(
-            lambda current: login_finished(current)
+            lambda current: is_authenticated(current)
             or has_verification_challenge(current)
             or has_login_error_message(current)
         )
@@ -236,19 +236,37 @@ def login(driver: webdriver.Chrome, username: str, password: str, interactive: b
             f"デバッグ保存先: {snapshot}"
         )
 
+    if not is_authenticated(driver) and not has_verification_challenge(driver):
+        snapshot = save_debug_snapshot(driver, "login-no-session")
+        raise RuntimeError(
+            "Instagramログイン後のセッションを確認できませんでした。"
+            "Chrome上では未ログイン扱いになっている可能性があります。"
+            f"デバッグ保存先: {snapshot}"
+        )
+
     if has_verification_challenge(driver):
         if not interactive:
             raise RuntimeError("Instagramが本人確認を要求しました。--visibleで再実行してください。")
         print("Chrome上で本人確認を完了してください（最大3分待機します）。")
         try:
-            WebDriverWait(driver, 180).until(login_finished)
+            WebDriverWait(driver, 180).until(is_authenticated)
         except TimeoutException as exc:
-            raise RuntimeError("Instagramの本人確認が時間内に完了しませんでした。") from exc
+            snapshot = save_debug_snapshot(driver, "login-challenge-timeout")
+            raise RuntimeError(
+                "Instagramの本人確認が時間内に完了しませんでした。"
+                f"デバッグ保存先: {snapshot}"
+            ) from exc
 
     dismiss_optional_dialogs(driver)
 
 def login_finished(driver: webdriver.Chrome) -> bool:
-    return "accounts/login" not in driver.current_url and not find_login_inputs(driver)
+    return is_authenticated(driver)
+
+def is_authenticated(driver: webdriver.Chrome) -> bool:
+    try:
+        return any(cookie.get("name") == "sessionid" and cookie.get("value") for cookie in driver.get_cookies())
+    except Exception:
+        return False
 
 def find_login_inputs(driver: webdriver.Chrome):
     username_selectors = (
