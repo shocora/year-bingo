@@ -17,6 +17,16 @@ class InstagramSyncTest(unittest.TestCase):
             "reel/ABC123",
         )
 
+    def test_normalize_profile_grid_post_url(self) -> None:
+        self.assertEqual(
+            instagram_sync.normalize_instagram_url("/kasubingo_2026/p/DVF-4hQkgSfMT30wJnOeuC0/"),
+            "https://www.instagram.com/p/DVF-4hQkgSfMT30wJnOeuC0/",
+        )
+        self.assertEqual(
+            instagram_sync.post_id_from_url("/kasubingo_2026/p/DVF-4hQkgSfMT30wJnOeuC0/"),
+            "p/DVF-4hQkgSfMT30wJnOeuC0",
+        )
+
     def test_normalize_classification_rejects_unknown_ids(self) -> None:
         result = instagram_sync.normalize_classification(
             {

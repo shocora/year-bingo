@@ -647,12 +647,26 @@ def first_text(driver: webdriver.Chrome, selectors: tuple[str, ...]) -> str:
     return ""
 
 def normalize_instagram_url(value: str) -> str:
-    match = re.search(r"https://www\.instagram\.com/(?:p|reel)/[^/?#]+", value)
-    return match.group(0) + "/" if match else ""
+    post_path = instagram_post_path(value)
+    return f"https://www.instagram.com/{post_path}/" if post_path else ""
 
 def post_id_from_url(value: str) -> str:
-    match = re.search(r"instagram\.com/((?:p|reel)/[^/?#]+)/?", value)
-    return match.group(1) if match else value
+    return instagram_post_path(value) or value
+
+def instagram_post_path(value: str) -> str:
+    """Extract a canonical p/<id> or reel/<id> path from current Instagram URLs.
+
+    Instagram may prefix links in profile grids with the account name, e.g.
+    /kasubingo_2026/p/ABC123/. Selenium returns that form for the current web UI.
+    """
+    path = urllib.parse.urlparse(value).path
+    segments = [segment for segment in path.split("/") if segment]
+    for index, segment in enumerate(segments[:-1]):
+        if segment in {"p", "reel"}:
+            post_key = segments[index + 1]
+            if post_key:
+                return f"{segment}/{post_key}"
+    return ""
 
 def clean_text(value: Any) -> str:
     if not isinstance(value, str):
