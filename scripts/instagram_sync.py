@@ -14,6 +14,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 MEMBERS = [
@@ -57,6 +59,7 @@ CELL_IDS = {cell["id"] for cell in CELLS}
 DEFAULT_MODEL = "gemini-2.5-flash-lite"
 DEFAULT_MAX_POSTS = 8
 API_TIMEOUT_SECONDS = 60
+DEBUG_DIR = Path("artifacts/instagram-sync")
 
 @dataclass(frozen=True)
 class InstagramPost:
@@ -179,9 +182,34 @@ def create_driver(headless: bool) -> webdriver.Chrome:
 def login(driver: webdriver.Chrome, username: str, password: str, interactive: bool) -> None:
     wait = WebDriverWait(driver, int_env("INSTAGRAM_WAIT_SECONDS", 30))
     driver.get("https://www.instagram.com/accounts/login/")
+    dismiss_optional_dialogs(driver)
 
-    username_input = wait.until(EC.element_to_be_clickable((By.NAME, "username")))
-    password_input = wait.until(EC.element_to_be_clickable((By.NAME, "password")))
+    try:
+        wait.until(
+            lambda current: login_finished(current)
+            or has_verification_challenge(current)
+            or find_login_inputs(current)
+        )
+    except TimeoutException as exc:
+        snapshot = save_debug_snapshot(driver, "login-form-timeout")
+        raise RuntimeError(
+            "Instagramログイン画面の入力欄を見つけられませんでした。"
+            f"Chromeに表示されている内容を確認してください。デバッグ保存先: {snapshot}"
+        ) from exc
+
+    if login_finished(driver):
+        dismiss_optional_dialogs(driver)
+        return
+
+    inputs = find_login_inputs(driver)
+    if not inputs:
+        snapshot = save_debug_snapshot(driver, "login-form-not-found")
+        raise RuntimeError(
+            "Instagramログイン画面の状態を判別できませんでした。"
+            f"デバッグ保存先: {snapshot}"
+        )
+
+    username_input, password_input = inputs
     username_input.clear()
     username_input.send_keys(username)
     password_input.clear()
@@ -189,9 +217,24 @@ def login(driver: webdriver.Chrome, username: str, password: str, interactive: b
     password_input.send_keys(Keys.ENTER)
 
     try:
-        wait.until(lambda current: login_finished(current) or has_verification_challenge(current))
+        wait.until(
+            lambda current: login_finished(current)
+            or has_verification_challenge(current)
+            or has_login_error_message(current)
+        )
     except TimeoutException as exc:
-        raise RuntimeError("Instagramログインを確認できませんでした。--visibleで再実行してください。") from exc
+        snapshot = save_debug_snapshot(driver, "login-finish-timeout")
+        raise RuntimeError(
+            "Instagramログイン完了を確認できませんでした。"
+            f"Chrome上で止まっている画面を確認してください。デバッグ保存先: {snapshot}"
+        ) from exc
+
+    if has_login_error_message(driver):
+        snapshot = save_debug_snapshot(driver, "login-error")
+        raise RuntimeError(
+            "Instagramログインに失敗した可能性があります。ID、パスワード、本人確認要求を確認してください。"
+            f"デバッグ保存先: {snapshot}"
+        )
 
     if has_verification_challenge(driver):
         if not interactive:
@@ -205,7 +248,32 @@ def login(driver: webdriver.Chrome, username: str, password: str, interactive: b
     dismiss_optional_dialogs(driver)
 
 def login_finished(driver: webdriver.Chrome) -> bool:
-    return "accounts/login" not in driver.current_url and not driver.find_elements(By.NAME, "username")
+    return "accounts/login" not in driver.current_url and not find_login_inputs(driver)
+
+def find_login_inputs(driver: webdriver.Chrome):
+    username_selectors = (
+        "input[name='username']",
+        "input[autocomplete='username']",
+        "input[aria-label*='電話']",
+        "input[aria-label*='Phone']",
+        "input[aria-label*='email']",
+        "input[aria-label*='メール']",
+    )
+    password_selectors = (
+        "input[name='password']",
+        "input[type='password']",
+        "input[autocomplete='current-password']",
+    )
+    username_input = first_enabled_element(driver, username_selectors)
+    password_input = first_enabled_element(driver, password_selectors)
+    return (username_input, password_input) if username_input and password_input else None
+
+def first_enabled_element(driver: webdriver.Chrome, selectors: tuple[str, ...]):
+    for selector in selectors:
+        for element in driver.find_elements(By.CSS_SELECTOR, selector):
+            if element.is_displayed() and element.is_enabled():
+                return element
+    return None
 
 def has_verification_challenge(driver: webdriver.Chrome) -> bool:
     selectors = (
@@ -215,6 +283,18 @@ def has_verification_challenge(driver: webdriver.Chrome) -> bool:
     )
     return any(driver.find_elements(By.CSS_SELECTOR, selector) for selector in selectors)
 
+def has_login_error_message(driver: webdriver.Chrome) -> bool:
+    page_text = clean_text(driver.find_element(By.TAG_NAME, "body").text)
+    error_markers = (
+        "パスワードが正しくありません",
+        "問題が発生しました",
+        "ログインできませんでした",
+        "incorrect",
+        "try again",
+        "challenge_required",
+    )
+    return any(marker.lower() in page_text.lower() for marker in error_markers)
+
 def dismiss_optional_dialogs(driver: webdriver.Chrome) -> None:
     for _ in range(3):
         try:
@@ -222,13 +302,33 @@ def dismiss_optional_dialogs(driver: webdriver.Chrome) -> None:
                 EC.element_to_be_clickable(
                     (
                         By.XPATH,
-                        "//button[contains(., '後で') or contains(., 'Not Now') or contains(., '今はしない') or contains(., '後にする')]",
+                        "//button[contains(., '後で') or contains(., 'Not Now') or contains(., '今はしない') or contains(., '後にする') or contains(., 'Allow all') or contains(., 'すべて許可') or contains(., '許可する')]",
                     )
                 )
             )
             button.click()
         except TimeoutException:
             return
+
+def save_debug_snapshot(driver: webdriver.Chrome, label: str) -> str:
+    DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    base = DEBUG_DIR / f"{timestamp}-{label}"
+    png_path = base.with_suffix(".png")
+    html_path = base.with_suffix(".html")
+
+    try:
+        driver.save_screenshot(str(png_path))
+    except Exception:
+        png_path = Path("")
+
+    try:
+        html_path.write_text(driver.page_source, encoding="utf-8")
+    except Exception:
+        html_path = Path("")
+
+    saved = [str(path) for path in (png_path, html_path) if path]
+    return ", ".join(saved) if saved else str(DEBUG_DIR)
 
 def collect_recent_post_urls(driver: webdriver.Chrome, profile_url: str, max_posts: int) -> list[str]:
     driver.get(profile_url)
