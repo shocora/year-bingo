@@ -105,7 +105,7 @@ def main() -> int:
     try:
         print("Instagramにログインしています...")
         login(driver, username, password, interactive=args.visible)
-        post_urls = collect_recent_post_urls(driver, profile_url, max_posts)
+        post_urls = collect_recent_post_urls(driver, profile_url, max_posts, interactive=args.visible)
         print(f"最新投稿を{len(post_urls)}件確認しました。")
 
         new_urls = [
@@ -118,7 +118,7 @@ def main() -> int:
             post_id = post_id_from_url(url)
             print(f"[{index}/{len(new_urls)}] {url}")
             try:
-                post = read_post(driver, url)
+                post = read_post(driver, url, interactive=args.visible)
                 classification = classify_post(gemini_api_key, model, post)
                 result = {
                     "postId": post.post_id,
@@ -185,100 +185,62 @@ def create_driver(headless: bool) -> webdriver.Chrome:
     return webdriver.Chrome(options=options)
 
 def login(driver: webdriver.Chrome, username: str, password: str, interactive: bool) -> None:
-    wait = WebDriverWait(driver, int_env("INSTAGRAM_WAIT_SECONDS", 30))
     driver.get("https://www.instagram.com/accounts/login/")
     dismiss_optional_dialogs(driver)
+    submitted_credentials = False
 
-    try:
-        wait.until(
-            lambda current: is_authenticated(current)
-            or has_verification_challenge(current)
-            or find_login_inputs(current)
-        )
-    except TimeoutException as exc:
-        snapshot = save_debug_snapshot(driver, "login-form-timeout")
-        raise RuntimeError(
-            "Instagramログイン画面の入力欄を見つけられませんでした。"
-            f"Chromeに表示されている内容を確認してください。デバッグ保存先: {snapshot}"
-        ) from exc
-
-    if is_authenticated(driver):
-        dismiss_optional_dialogs(driver)
-        return
-
-    inputs = find_login_inputs(driver)
-    if not inputs:
-        snapshot = save_debug_snapshot(driver, "login-form-not-found")
-        raise RuntimeError(
-            "Instagramログイン画面の状態を判別できませんでした。"
-            f"デバッグ保存先: {snapshot}"
-        )
-
-    username_input, password_input = inputs
-    username_input.clear()
-    username_input.send_keys(username)
-    password_input.clear()
-    password_input.send_keys(password)
-    password_input.send_keys(Keys.ENTER)
-
-    try:
-        wait.until(
+    while not is_authenticated(driver):
+        wait_until_or_manual(
+            driver,
             lambda current: is_authenticated(current)
             or has_verification_challenge(current)
             or has_manual_action_message(current)
             or has_login_error_message(current)
+            or find_login_inputs(current),
+            "Instagramログイン画面または確認画面",
+            "login-wait",
+            interactive,
         )
-    except TimeoutException as exc:
-        snapshot = save_debug_snapshot(driver, "login-finish-timeout")
-        raise RuntimeError(
-            "Instagramログイン完了を確認できませんでした。"
-            f"Chrome上で止まっている画面を確認してください。デバッグ保存先: {snapshot}"
-        ) from exc
 
-    if has_manual_action_message(driver):
-        if not interactive:
-            snapshot = save_debug_snapshot(driver, "login-manual-action")
-            raise RuntimeError(
-                "Instagramが手動確認を要求しました。--visibleで再実行してください。"
-                f"デバッグ保存先: {snapshot}"
+        if is_authenticated(driver):
+            break
+
+        if has_login_error_message(driver):
+            request_manual_recovery(
+                driver,
+                interactive,
+                "Instagramログインに失敗した可能性があります。ID、パスワード、本人確認要求をChromeで確認してください。",
+                "login-error",
             )
-        print("Chrome上でreCAPTCHAや本人確認を完了してください（最大5分待機します）。")
-        try:
-            WebDriverWait(driver, 300).until(is_authenticated)
-        except TimeoutException as exc:
-            snapshot = save_debug_snapshot(driver, "login-manual-action-timeout")
-            raise RuntimeError(
-                "Instagramの手動確認が時間内に完了しませんでした。"
-                f"デバッグ保存先: {snapshot}"
-            ) from exc
+            submitted_credentials = False
+            continue
 
-    if has_login_error_message(driver):
-        snapshot = save_debug_snapshot(driver, "login-error")
-        raise RuntimeError(
-            "Instagramログインに失敗した可能性があります。ID、パスワード、本人確認要求を確認してください。"
-            f"デバッグ保存先: {snapshot}"
+        if has_verification_challenge(driver) or has_manual_action_message(driver):
+            request_manual_recovery(
+                driver,
+                interactive,
+                "InstagramがreCAPTCHAまたは本人確認を要求しています。Chromeで完了してください。",
+                "login-manual-action",
+            )
+            continue
+
+        inputs = find_login_inputs(driver)
+        if inputs and not submitted_credentials:
+            username_input, password_input = inputs
+            username_input.clear()
+            username_input.send_keys(username)
+            password_input.clear()
+            password_input.send_keys(password)
+            password_input.send_keys(Keys.ENTER)
+            submitted_credentials = True
+            continue
+
+        request_manual_recovery(
+            driver,
+            interactive,
+            "Instagramログインの続きを自動判定できませんでした。Chromeで必要な操作を完了してください。",
+            "login-unknown",
         )
-
-    if not is_authenticated(driver) and not has_verification_challenge(driver):
-        snapshot = save_debug_snapshot(driver, "login-no-session")
-        raise RuntimeError(
-            "Instagramログイン後のセッションを確認できませんでした。"
-            "Chrome上では未ログイン扱いになっている可能性があります。"
-            f"デバッグ保存先: {snapshot}"
-        )
-
-    if has_verification_challenge(driver):
-        if not interactive:
-            raise RuntimeError("Instagramが本人確認を要求しました。--visibleで再実行してください。")
-        print("Chrome上で本人確認を完了してください（最大3分待機します）。")
-        try:
-            WebDriverWait(driver, 180).until(is_authenticated)
-        except TimeoutException as exc:
-            snapshot = save_debug_snapshot(driver, "login-challenge-timeout")
-            raise RuntimeError(
-                "Instagramの本人確認が時間内に完了しませんでした。"
-                f"デバッグ保存先: {snapshot}"
-            ) from exc
 
     dismiss_optional_dialogs(driver)
 
@@ -367,6 +329,36 @@ def body_excerpt(driver: webdriver.Chrome, max_length: int = 220) -> str:
     text = body_text(driver)
     return text[:max_length] if text else "(本文なし)"
 
+def wait_until_or_manual(
+    driver: webdriver.Chrome,
+    condition,
+    description: str,
+    snapshot_label: str,
+    interactive: bool,
+    timeout: int | None = None,
+):
+    wait_seconds = timeout if timeout is not None else int_env("INSTAGRAM_WAIT_SECONDS", 30)
+    while True:
+        try:
+            return WebDriverWait(driver, wait_seconds).until(condition)
+        except TimeoutException:
+            request_manual_recovery(
+                driver,
+                interactive,
+                f"{description}を確認できませんでした。Chromeで必要な操作を完了してください。",
+                snapshot_label,
+            )
+
+def request_manual_recovery(driver: webdriver.Chrome, interactive: bool, message: str, snapshot_label: str) -> None:
+    snapshot = save_debug_snapshot(driver, snapshot_label)
+    details = f"{message}\n現在URL: {driver.current_url}\n画面テキスト: {body_excerpt(driver)}\nデバッグ保存先: {snapshot}"
+
+    if not interactive or not sys.stdin.isatty():
+        raise RuntimeError(details + "\n--visibleで再実行すると手動操作で続行できます。")
+
+    print(details)
+    input("Chromeで操作を完了したら、PowerShellに戻ってEnterを押してください...")
+
 def wait_before_closing_browser() -> None:
     if not sys.stdin.isatty():
         return
@@ -410,74 +402,74 @@ def save_debug_snapshot(driver: webdriver.Chrome, label: str) -> str:
     saved = [str(path) for path in (png_path, html_path) if path]
     return ", ".join(saved) if saved else str(DEBUG_DIR)
 
-def collect_recent_post_urls(driver: webdriver.Chrome, profile_url: str, max_posts: int) -> list[str]:
+def collect_recent_post_urls(driver: webdriver.Chrome, profile_url: str, max_posts: int, interactive: bool) -> list[str]:
     driver.get(profile_url)
-    try:
-        WebDriverWait(driver, int_env("INSTAGRAM_WAIT_SECONDS", 30)).until(
+    while True:
+        wait_until_or_manual(
+            driver,
             lambda current: current.find_elements(By.CSS_SELECTOR, "a[href*='/p/'], a[href*='/reel/']")
             or current.find_elements(By.TAG_NAME, "article")
             or find_login_inputs(current)
-            or has_manual_action_message(current)
-        )
-    except TimeoutException as exc:
-        snapshot = save_debug_snapshot(driver, "profile-timeout")
-        raise RuntimeError(
-            "Instagramプロフィールページで投稿一覧を見つけられませんでした。"
-            f"現在URL: {driver.current_url} / 画面テキスト: {body_excerpt(driver)} / デバッグ保存先: {snapshot}"
-        ) from exc
-
-    if find_login_inputs(driver):
-        snapshot = save_debug_snapshot(driver, "profile-login-required")
-        raise RuntimeError(
-            "プロフィール表示時にログイン画面へ戻されました。ログイン情報またはInstagram側の確認要求を確認してください。"
-            f"デバッグ保存先: {snapshot}"
+            or has_manual_action_message(current),
+            "Instagramプロフィールページの投稿一覧",
+            "profile-timeout",
+            interactive,
         )
 
-    if has_manual_action_message(driver):
-        snapshot = save_debug_snapshot(driver, "profile-manual-action")
-        raise RuntimeError(
-            "Instagram側で手動確認が必要な画面が表示されています。Chrome上で確認してから再実行してください。"
-            f"画面テキスト: {body_excerpt(driver)} / デバッグ保存先: {snapshot}"
+        if find_login_inputs(driver):
+            request_manual_recovery(
+                driver,
+                interactive,
+                "プロフィール表示時にログイン画面へ戻されました。Chromeでログインを完了してください。",
+                "profile-login-required",
+            )
+            continue
+
+        if has_manual_action_message(driver):
+            request_manual_recovery(
+                driver,
+                interactive,
+                "Instagram側で手動確認が必要な画面が表示されています。Chromeで確認を完了してください。",
+                "profile-manual-action",
+            )
+            continue
+
+        post_urls: list[str] = []
+        seen: set[str] = set()
+
+        for _ in range(8):
+            anchors = driver.find_elements(By.CSS_SELECTOR, "a[href*='/p/'], a[href*='/reel/']")
+            for anchor in anchors:
+                href = normalize_instagram_url(anchor.get_attribute("href") or "")
+                if href and href not in seen:
+                    seen.add(href)
+                    post_urls.append(href)
+                    if len(post_urls) >= max_posts:
+                        break
+            if len(post_urls) >= max_posts:
+                break
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
+            time.sleep(float_env("INSTAGRAM_SCROLL_WAIT_SECONDS", 1.2))
+
+        if post_urls:
+            return post_urls[:max_posts]
+
+        request_manual_recovery(
+            driver,
+            interactive,
+            "プロフィールから投稿URLを取得できませんでした。対象プロフィールURLや表示状態をChromeで確認してください。",
+            "profile-no-posts",
         )
 
-    post_urls: list[str] = []
-    seen: set[str] = set()
-
-    for _ in range(8):
-        anchors = driver.find_elements(By.CSS_SELECTOR, "a[href*='/p/'], a[href*='/reel/']")
-        for anchor in anchors:
-            href = normalize_instagram_url(anchor.get_attribute("href") or "")
-            if href and href not in seen:
-                seen.add(href)
-                post_urls.append(href)
-                if len(post_urls) >= max_posts:
-                    break
-        if len(post_urls) >= max_posts:
-            break
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
-        time.sleep(float_env("INSTAGRAM_SCROLL_WAIT_SECONDS", 1.2))
-
-    if not post_urls:
-        snapshot = save_debug_snapshot(driver, "profile-no-posts")
-        raise RuntimeError(
-            "プロフィールから投稿URLを取得できませんでした。対象プロフィールURLが正しいか確認してください。"
-            f"現在URL: {driver.current_url} / デバッグ保存先: {snapshot}"
-        )
-
-    return post_urls[:max_posts]
-
-def read_post(driver: webdriver.Chrome, url: str) -> InstagramPost:
+def read_post(driver: webdriver.Chrome, url: str, interactive: bool) -> InstagramPost:
     driver.get(url)
-    try:
-        article = WebDriverWait(driver, int_env("INSTAGRAM_WAIT_SECONDS", 30)).until(
-            EC.presence_of_element_located((By.TAG_NAME, "article"))
-        )
-    except TimeoutException as exc:
-        snapshot = save_debug_snapshot(driver, "post-timeout")
-        raise RuntimeError(
-            "Instagram投稿ページの本文を見つけられませんでした。"
-            f"現在URL: {driver.current_url} / 画面テキスト: {body_excerpt(driver)} / デバッグ保存先: {snapshot}"
-        ) from exc
+    article = wait_until_or_manual(
+        driver,
+        lambda current: current.find_elements(By.TAG_NAME, "article"),
+        "Instagram投稿ページの本文",
+        "post-timeout",
+        interactive,
+    )[0]
     time.sleep(0.8)
     caption = first_text(driver, ("article h1", "article span[dir='auto']", "main article"))
     screenshot = article.screenshot_as_png or driver.get_screenshot_as_png()
