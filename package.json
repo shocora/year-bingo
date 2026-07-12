@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "security": "npm audit --audit-level=moderate",
+    "sync:instagram": "python scripts/instagram_sync.py",
+    "test:python": "python -m unittest discover -s scripts -p \"test_*.py\"",
     "cf:migrate:local": "wrangler d1 migrations apply year-bingo-db --local",
     "cf:migrate:remote": "wrangler d1 migrations apply year-bingo-db --remote",
     "cf:dev": "npm run build && wrangler pages dev dist"
@@ -20,14 +22,14 @@
     "react-dom": "^19.2.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251121.0",
+    "@cloudflare/workers-types": "^4.20260617.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "typescript": "^5.9.3",
-    "vite": "^7.2.4",
-    "vitest": "^4.0.13",
-    "wrangler": "^4.94.0"
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.102.0"
   }
 }
