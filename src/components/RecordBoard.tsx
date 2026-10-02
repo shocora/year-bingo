@@ -2,10 +2,11 @@ import { ArrowRight, ArrowUpRight, Instagram } from "lucide-react";
 import { useState } from "react";
 import { cells, getMember, members } from "../../shared/domain";
 import { instagramSnapshot } from "../data/instagram-posts";
-import { filterPosts, formatPostDate, matchesMember, type MemberFilter, type TopicFilter } from "../lib/instagram-posts";
+import { countLatestCellsByMember, filterPosts, formatPostDate, matchesMember, type MemberFilter, type TopicFilter } from "../lib/instagram-posts";
 import { TopicIcon } from "./TopicIcon";
 
 type OpenArchive = (topic: TopicFilter, member?: MemberFilter) => void;
+const latestCellCounts = countLatestCellsByMember(instagramSnapshot.posts);
 
 export function RecordBoard({ onOpen }: { onOpen: OpenArchive }) {
   const [member, setMember] = useState<MemberFilter>("all");
@@ -16,6 +17,15 @@ export function RecordBoard({ onOpen }: { onOpen: OpenArchive }) {
         <p>気になるマスから、みんなの発見をのぞいてみよう。</p>
         <span>各マスは最新の投稿</span>
       </div>
+      <section className="current-holder-summary" aria-label="最新記録を保持しているマス数">
+        <div className="holder-summary-label"><span>現在の保持マス</span><small>最新記録</small></div>
+        {members.map((person) => (
+          <div className={`holder-count ${person.colorClass}`} key={person.id}>
+            <span><i />{person.name}</span><strong>{latestCellCounts[person.id]}<small>マス</small></strong>
+          </div>
+        ))}
+      </section>
+      <p className="record-filter-label">投稿履歴をメンバーで絞り込む</p>
       <div className="record-member-filters" aria-label="記録をメンバーで絞り込む">
         <button
           className={`filter-member filter-all ${member === "all" ? "is-active" : ""}`}
@@ -53,10 +63,10 @@ export function RecordBoard({ onOpen }: { onOpen: OpenArchive }) {
             >
               <span className="topic-tile-top">
                 <span className={`topic-icon tone-${cell.tone}`}><TopicIcon cellId={cell.id} /></span>
-                <span className="topic-number">{person ? <><span className="member-dot" />{person.name}</> : String(index + 1).padStart(2, "0")}</span>
+                <span className="topic-number">{person ? <><span className="member-dot" /><span className="topic-member-name">{person.name}</span><span className="topic-member-short">{person.shortName}</span></> : String(index + 1).padStart(2, "0")}</span>
               </span>
               <span className="topic-title">{cell.title}</span>
-              <strong className={`topic-value ${(latest?.value?.length ?? 0) > 10 ? "is-long" : ""}`}>
+              <strong className={`topic-value ${(latest?.value?.length ?? 0) > 8 ? "is-long" : ""}`}>
                 {latest ? latest.value ?? "値は未確認" : "—"}
               </strong>
               <span className="topic-author">

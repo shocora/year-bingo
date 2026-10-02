@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cells, members } from "../../shared/domain";
 import { instagramSnapshot, type InstagramPost } from "../data/instagram-posts";
-import { countPostsByCell, filterPosts, formatPostDate } from "./instagram-posts";
+import { countLatestCellsByMember, countPostsByCell, filterPosts, formatPostDate, getLatestRecordByCell } from "./instagram-posts";
 
 describe("embedded Instagram archive", () => {
   it("includes every captured post once with valid topics, members, dates, and no embedded photos", () => {
@@ -45,6 +45,18 @@ describe("embedded Instagram archive", () => {
     expect(filterPosts([post], "steps", "nissy")).toEqual([]);
     expect(filterPosts([post], "steps", "mitchy")).toEqual([post]);
     expect(countPostsByCell([post]).steps).toBe(1);
+  });
+
+  it("counts the member currently holding each latest cell record", () => {
+    const latest = getLatestRecordByCell(instagramSnapshot.posts);
+    expect(Object.values(latest).filter(Boolean)).toHaveLength(24);
+    expect(countLatestCellsByMember(instagramSnapshot.posts)).toEqual({
+      ryo: 6,
+      murakami: 6,
+      kobari: 5,
+      mitchy: 2,
+      nissy: 5
+    });
   });
 
   it("uses Japan dates and original publish dates even when captions were edited later", () => {

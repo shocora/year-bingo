@@ -19,7 +19,7 @@ import {
 import { PostArchive } from "./components/PostArchive";
 import { RecentPosts, RecordBoard } from "./components/RecordBoard";
 import { instagramSnapshot } from "./data/instagram-posts";
-import { countPostsByCell, filterPosts, formatPostDate, type MemberFilter, type TopicFilter } from "./lib/instagram-posts";
+import { countPostsByCell, formatPostDate, getLatestRecordByCell, type MemberFilter, type TopicFilter } from "./lib/instagram-posts";
 
 type SyncState = "loading" | "ready" | "saving" | "offline";
 
@@ -42,12 +42,7 @@ type DragState = {
 
 const dragThreshold = 8;
 const postCounts = countPostsByCell(instagramSnapshot.posts);
-const latestRecordByCell = Object.fromEntries(
-  cells.map((cell) => {
-    const latestPost = filterPosts(instagramSnapshot.posts, cell.id, "all")[0];
-    return [cell.id, latestPost?.records.find((record) => record.cellId === cell.id) ?? null];
-  })
-) as Record<CellId, (typeof instagramSnapshot.posts)[number]["records"][number] | null>;
+const latestRecordByCell = getLatestRecordByCell(instagramSnapshot.posts);
 const completedCellCount = Object.values(postCounts).filter((count) => count > 0).length;
 const bingoLines = [
   [0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11, 12, 13, 14], [15, 16, 17, 18, 19], [20, 21, 22, 23, 24],
