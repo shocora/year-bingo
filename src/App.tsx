@@ -365,7 +365,7 @@ export default function App() {
           <button className="archive-open" type="button" aria-label={`すべての投稿 ${instagramSnapshot.posts.length}件を見る`} onClick={() => openArchive("all")}><BookOpen size={16} aria-hidden="true" /><span>すべての投稿</span><span className="archive-total">{instagramSnapshot.posts.length}</span></button>
         </div>
 
-        {!editing ? <RecordBoard onOpen={openArchive} values={values} /> : <>
+        {!editing ? <RecordBoard onOpen={openArchive} /> : <>
       <section className="editor-intro" aria-label="編集の状態">
         <div><h2>担当と記録をセット</h2><p>メンバーを選んでマスをタップ。数値は直接入力できます。</p></div>
         <div className="status-stack"><span className={`sync-pill sync-${syncState}`}><i />{statusLabel}</span><span className="count-pill">担当設定 {filledCount}/25 {version ? <span className="version-text">v{version}</span> : null}</span></div>

@@ -1,13 +1,13 @@
 import { ArrowRight, ArrowUpRight, Instagram } from "lucide-react";
 import { useState } from "react";
-import { cells, getMember, members, type Values } from "../../shared/domain";
+import { cells, getMember, members } from "../../shared/domain";
 import { instagramSnapshot } from "../data/instagram-posts";
 import { filterPosts, formatPostDate, matchesMember, type MemberFilter, type TopicFilter } from "../lib/instagram-posts";
 import { TopicIcon } from "./TopicIcon";
 
 type OpenArchive = (topic: TopicFilter, member?: MemberFilter) => void;
 
-export function RecordBoard({ onOpen, values }: { onOpen: OpenArchive; values: Values }) {
+export function RecordBoard({ onOpen }: { onOpen: OpenArchive }) {
   const [member, setMember] = useState<MemberFilter>("all");
 
   return (
@@ -43,7 +43,6 @@ export function RecordBoard({ onOpen, values }: { onOpen: OpenArchive; values: V
           const posts = filterPosts(instagramSnapshot.posts, cell.id, member);
           const latest = posts[0]?.records.find((record) => record.cellId === cell.id && matchesMember(record.memberId, member));
           const person = latest?.memberId ? getMember(latest.memberId) : null;
-          const bingoValue = values[cell.id];
           return (
             <button
               key={cell.id}
@@ -58,7 +57,7 @@ export function RecordBoard({ onOpen, values }: { onOpen: OpenArchive; values: V
               </span>
               <span className="topic-title">{cell.title}</span>
               <strong className={`topic-value ${(latest?.value?.length ?? 0) > 10 ? "is-long" : ""}`}>
-                {bingoValue || (latest ? latest.value ?? "値は未確認" : "—")}
+                {latest ? latest.value ?? "値は未確認" : "—"}
               </strong>
               <span className="topic-author">
                 {person ? <><span className={`member-dot ${person.colorClass}`} />{person.name}</> : posts.length ? "メンバー未確認" : "これからの発見"}
