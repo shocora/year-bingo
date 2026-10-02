@@ -1,4 +1,4 @@
-import { RefreshCw, Trash2 } from "lucide-react";
+import { ArrowUpRight, BookOpen, Grid2X2, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MAX_VALUE_LENGTH,
@@ -16,6 +16,10 @@ import {
   type Placements,
   type Values
 } from "../shared/domain";
+import { PostArchive } from "./components/PostArchive";
+import { RecentPosts, RecordBoard } from "./components/RecordBoard";
+import { instagramSnapshot } from "./data/instagram-posts";
+import { countPostsByCell, filterPosts, formatPostDate, type MemberFilter, type TopicFilter } from "./lib/instagram-posts";
 
 type SyncState = "loading" | "ready" | "saving" | "offline";
 
@@ -37,8 +41,26 @@ type DragState = {
 };
 
 const dragThreshold = 8;
+const postCounts = countPostsByCell(instagramSnapshot.posts);
+const latestRecordByCell = Object.fromEntries(
+  cells.map((cell) => {
+    const latestPost = filterPosts(instagramSnapshot.posts, cell.id, "all")[0];
+    return [cell.id, latestPost?.records.find((record) => record.cellId === cell.id) ?? null];
+  })
+) as Record<CellId, (typeof instagramSnapshot.posts)[number]["records"][number] | null>;
+const completedCellCount = Object.values(postCounts).filter((count) => count > 0).length;
+const bingoLines = [
+  [0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11, 12, 13, 14], [15, 16, 17, 18, 19], [20, 21, 22, 23, 24],
+  [0, 5, 10, 15, 20], [1, 6, 11, 16, 21], [2, 7, 12, 17, 22], [3, 8, 13, 18, 23], [4, 9, 14, 19, 24],
+  [0, 6, 12, 18, 24], [4, 8, 12, 16, 20]
+] as const;
 
 export default function App() {
+  const [archiveSelection, setArchiveSelection] = useState<{ topic: TopicFilter; member: MemberFilter } | null>(null);
+  const [editing, setEditing] = useState(false);
+  const openArchive = useCallback((topic: TopicFilter, member: MemberFilter = "all") => {
+    setArchiveSelection({ topic, member });
+  }, []);
   const [placements, setPlacements] = useState<Placements>(() => createEmptyPlacements());
   const [values, setValues] = useState<Values>(() => createEmptyValues());
   const [selectedMemberId, setSelectedMemberId] = useState<MemberId | "clear">("ryo");
@@ -292,6 +314,8 @@ export default function App() {
     return counts;
   }, [placements]);
 
+  const completedLineCount = bingoLines.filter((line) => line.every((index) => postCounts[cells[index].id] > 0)).length;
+
   const statusLabel = useMemo(() => {
     if (syncState === "loading") {
       return "読み込み中";
@@ -302,7 +326,7 @@ export default function App() {
     }
 
     if (syncState === "offline") {
-      return "ローカル表示";
+      return "共有に未接続";
     }
 
     return updatedAt ? `同期済み ${formatUpdatedAt(updatedAt)}` : "同期済み";
@@ -310,18 +334,41 @@ export default function App() {
 
   return (
     <main className="app-shell">
-      <section className="top-bar" aria-label="ビンゴの状態">
-        <div>
-          <p className="eyebrow">おもしろ探索ビンゴ</p>
-          <h1>担当チップ</h1>
+      <header className="site-header">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">{Array.from({ length: 9 }, (_, i) => <i key={i} />)}</span>
+          <div><span className="brand-name">おもしろ探索ビンゴ</span><span className="brand-subtitle">YEAR BINGO <span>2026</span></span></div>
         </div>
-        <div className="status-stack">
-          <span className={`sync-pill sync-${syncState}`}>{statusLabel}</span>
-          <span className="count-pill">
-            {filledCount}/25
-            {version ? <span className="version-text"> v{version}</span> : null}
-          </span>
+        <a className="header-link" href={instagramSnapshot.profileUrl} target="_blank" rel="noopener noreferrer" aria-label="Instagramのプロフィールを開く">
+          <span>Instagram</span><ArrowUpRight size={17} aria-hidden="true" />
+        </a>
+      </header>
+
+      <section className="hero" aria-labelledby="page-title">
+        <div className="hero-copy">
+          <p className="eyebrow"><span className="live-dot" />5人でつくる、一年の探索ノート</p>
+          <h1 id="page-title">今年の発見、<br /><span>ひとマスずつ。</span></h1>
+          <p className="hero-description">いつもの毎日に隠れた「いちばん」を集めよう。</p>
         </div>
+        <div className="exploration-summary" aria-label="収録した投稿の集計">
+          <div className="summary-primary"><span>投稿済みのマス</span><strong>{completedCellCount}<small>/ 25</small></strong><div className="mini-bingo" aria-hidden="true">{cells.map((cell) => { const memberId = latestRecordByCell[cell.id]?.memberId; const member = memberId ? getMember(memberId) : null; return <i key={cell.id} className={member?.colorClass ?? ""} />; })}</div></div>
+          <div className="summary-secondary"><div><strong>{completedLineCount}</strong><span>完成ライン</span></div><div><strong>{instagramSnapshot.posts.length}</strong><span>投稿の記録</span></div></div>
+        </div>
+      </section>
+
+      <section className="board-panel" aria-label="ビンゴと投稿">
+        <div className="board-toolbar">
+          <nav className="view-switch" aria-label="表示モード">
+            <button type="button" className={!editing ? "is-active" : ""} aria-pressed={!editing} onClick={() => setEditing(false)}><Grid2X2 size={16} aria-hidden="true" />お題から探す</button>
+            <button type="button" className={editing ? "is-active" : ""} aria-pressed={editing} onClick={() => setEditing(true)}><Pencil size={15} aria-hidden="true" />ボードを編集</button>
+          </nav>
+          <button className="archive-open" type="button" aria-label={`すべての投稿 ${instagramSnapshot.posts.length}件を見る`} onClick={() => openArchive("all")}><BookOpen size={16} aria-hidden="true" /><span>すべての投稿</span><span className="archive-total">{instagramSnapshot.posts.length}</span></button>
+        </div>
+
+        {!editing ? <RecordBoard onOpen={openArchive} values={values} /> : <>
+      <section className="editor-intro" aria-label="編集の状態">
+        <div><h2>担当と記録をセット</h2><p>メンバーを選んでマスをタップ。数値は直接入力できます。</p></div>
+        <div className="status-stack"><span className={`sync-pill sync-${syncState}`}><i />{statusLabel}</span><span className="count-pill">担当設定 {filledCount}/25 {version ? <span className="version-text">v{version}</span> : null}</span></div>
       </section>
 
       <section className="member-dock" aria-label="メンバー">
@@ -331,6 +378,7 @@ export default function App() {
               selectedMemberId === member.id ? "is-selected" : ""
             }`}
             aria-label={`${member.name} ${memberCounts[member.id]}枚`}
+            aria-pressed={selectedMemberId === member.id}
             key={member.id}
             type="button"
             onClick={() => setSelectedMemberId(member.id)}
@@ -409,26 +457,45 @@ export default function App() {
                   }}
                 />
               </label>
-              {member ? (
-                <span
-                  className={`placed-chip ${member.colorClass}`}
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    startDrag(event, member.id, cell.id);
-                  }}
-                >
-                  <span>{member.name}</span>
-                </span>
-              ) : null}
+              <div className="cell-member-slot">
+                {member ? (
+                  <span
+                    className={`placed-chip ${member.colorClass}`}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      startDrag(event, member.id, cell.id);
+                    }}
+                  >
+                    <span>{member.name}</span>
+                  </span>
+                ) : null}
+              </div>
+              <button
+                className={`cell-post-button ${postCounts[cell.id] > 0 ? "has-posts" : ""}`}
+                type="button"
+                aria-label={`${cell.title}の投稿 ${postCounts[cell.id]}件を見る`}
+                onClick={() => openArchive(cell.id)}
+              >
+                <BookOpen size={12} aria-hidden="true" /> 投稿 {postCounts[cell.id]}
+              </button>
             </div>
           );
         })}
       </section>
+        </>}
+        <div className="board-footnote"><span><span className="live-dot" />投稿データをアプリに収録済み</span><span>{formatPostDate(instagramSnapshot.capturedAt)} 更新</span></div>
+      </section>
+
+      <RecentPosts onOpen={openArchive} />
 
       <details className="source-board">
-        <summary>元画像</summary>
+        <summary>25のお題を、元のビンゴカードで見る</summary>
         <img src="/bingo-board.jpg" alt="おもしろ探索ビンゴの元画像" />
       </details>
+
+      <footer className="site-footer"><span>小さな発見を、今年の思い出に。</span><span>YEAR BINGO / 2026</span></footer>
+
+      {archiveSelection !== null && <PostArchive initialTopic={archiveSelection.topic} initialMember={archiveSelection.member} onClose={() => setArchiveSelection(null)} />}
 
       {dragging?.active ? (
         <div className={`drag-ghost ${getMember(dragging.memberId)?.colorClass ?? ""}`} style={{ left: dragging.x, top: dragging.y }}>
